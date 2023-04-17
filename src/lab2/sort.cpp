@@ -12,25 +12,27 @@ const int SIZE = 1 << 16;
 int THREADS_NUM;
 const int SAMPLE_SIZE = 8000;
 
-//int temp[SIZE] = { 0 };
+// int temp[SIZE] = { 0 };
 
 random_device rd;
 mt19937 gen(rd());
 
 void getArray(int *arr, int *arr1);
 bool check(int arr[]);
-void merge(int *arr, int left, int mid, int right);
+// void merge(int *arr, int left, int mid, int right);
 void mergeSort(int *arr, int left, int right);
 
 int main(int argc, char* argv[]) {
 
 	// 课本示例
-	/*int arr[] = {15,46,48,93,39,6,72,91,14,
+	/*
+	int arr[] = {15,46,48,93,39,6,72,91,14,
 		36,69,40,89,61,97,12,21,54,
 		53,97,84,58,32,27,33,72,20 };
 	int arr1[] = { 15,46,48,93,39,6,72,91,14,
 		36,69,40,89,61,97,12,21,54,
-		53,97,84,58,32,27,33,72,20 };*/
+		53,97,84,58,32,27,33,72,20 };
+	*/
 	
 	int taskid;
 	MPI_Init(&argc, &argv);
@@ -54,12 +56,14 @@ int main(int argc, char* argv[]) {
 		delete[] arr;
 	}
 
+	// 每个处理器需要处理的数组
 	int* task_arr = new int[SIZE / THREADS_NUM], task_sample[SAMPLE_SIZE];
 	int task_stride = SIZE / THREADS_NUM;
 	int sample_stride = SIZE / (SAMPLE_SIZE * THREADS_NUM);
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
 	// 均匀划分
+	// 用散播的方式，将进程0的数组均匀划分给每个进程
 	MPI_Scatter(arr1, task_stride, MPI_INT, task_arr, task_stride, MPI_INT, 0, MPI_COMM_WORLD);
 	
 	// 局部排序
@@ -79,6 +83,8 @@ int main(int argc, char* argv[]) {
 	if (taskid == 0) {
 		samples = new int[SAMPLE_SIZE * THREADS_NUM];
 	}
+
+	// 进程0收集所有进程采样得到的数据，然后在进程0内做串行的采样排序
 	MPI_Gather(task_sample, SAMPLE_SIZE, MPI_INT, samples, SAMPLE_SIZE, MPI_INT, 0, MPI_COMM_WORLD);
 	if (taskid == 0) {
 		// 采样排序
@@ -92,11 +98,13 @@ int main(int argc, char* argv[]) {
 	}
 	MPI_Barrier(MPI_COMM_WORLD);	// 等待0号进程选择主元
 
-	// 选择主元, 广播
+	// 选择主元, 广播给所有进程
 	MPI_Bcast(pivots, THREADS_NUM - 1, MPI_INT, 0, MPI_COMM_WORLD);
 	
 	// 主元划分
+	// part_start_index 记录当前进程内，每个主元划分后的起始地址
 	int *part_start_index = new int[THREADS_NUM];
+	// part_len 记录每个主元划分后的长度
 	int *part_len = new int[THREADS_NUM];
 	int index = 0;
 	for (int i = 0; i < THREADS_NUM - 1; i++) {
@@ -112,9 +120,12 @@ int main(int argc, char* argv[]) {
 	part_len[THREADS_NUM - 1] = task_stride - index;
 
 	// 全局交换
+	// 将所有数据都进行交换
+	// recv_part_len 用来接收交换后数组的每个部分的长度
 	int *recv_part_len = new int[THREADS_NUM];
 	MPI_Alltoall(part_len, 1, MPI_INT, recv_part_len, 1, MPI_INT, MPI_COMM_WORLD);
 
+	// 记录每个部分的起始位置
 	int *recv_start_index = new int[THREADS_NUM];
 	int recv_len = 0;
 	for (int i = 0; i < THREADS_NUM; i++) {
@@ -128,10 +139,14 @@ int main(int argc, char* argv[]) {
 	
 	// 归并排序
 	mergeSort(recv_task_arr, 0, recv_len - 1);
+
+	// 将最后归并排序好的数组合并起来
 	int* sorted_arr = NULL;
 	if (taskid == 0) {
 		sorted_arr = new int[SIZE];
 	}
+
+	// 同理，需要知道每个部分的长度和起始偏移位置
 	int *lens = new int[THREADS_NUM];
 	MPI_Alltoall(&recv_len, 1, MPI_INT, lens, 1, MPI_INT, MPI_COMM_WORLD);
 	MPI_Bcast(lens, THREADS_NUM, MPI_INT, 0, MPI_COMM_WORLD);
@@ -143,6 +158,7 @@ int main(int argc, char* argv[]) {
 		len += lens[i];
 	}
 
+	// 0号进程收集，保存到sorted_arr中
 	MPI_Gatherv(recv_task_arr, recv_len, MPI_INT, sorted_arr, lens, len_index, MPI_INT, 0, MPI_COMM_WORLD);
 
 	if (taskid == 0) {
@@ -151,7 +167,6 @@ int main(int argc, char* argv[]) {
 		cout << "Parallel Correctness: " << check(sorted_arr) << endl;
 		cout << "Parallel Running Time: " << static_cast <float> (duration) / 1000000.0f << " seconds" << endl;
 	}
-
 
 	delete[] arr1;
 	delete[] task_arr;
@@ -189,7 +204,8 @@ bool check(int arr[]) {
 	return true;
 }
 
-/*void merge(int* arr, int left, int mid, int right) {
+/*
+void merge(int* arr, int left, int mid, int right) {
 	int l = left, r = mid + 1, index = left;
 	while (l <= mid && r <= right) {
 		if (arr[l] <= arr[r]) {
@@ -209,14 +225,15 @@ bool check(int arr[]) {
 		arr[i] = temp[i];
 	}
 	return;
-}*/
+}
+*/
 
 void mergeSort(int *arr, int left, int right) {
 	if (left < right) {
 		int mid = (right - left) / 2 + left;
 		mergeSort(arr, left, mid);
 		mergeSort(arr, mid + 1, right);
-		//merge(arr, left, mid, right);
+		// merge(arr, left, mid, right);
 		std::inplace_merge(arr + left, arr + mid + 1, arr + right + 1);
 	}
 	return;
