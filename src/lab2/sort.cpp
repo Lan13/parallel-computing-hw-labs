@@ -8,11 +8,11 @@
 using namespace std;
 using namespace std::chrono;
 
-const int SIZE = 1 << 17;
+const int SIZE = 1 << 16;
 int THREADS_NUM;
 const int SAMPLE_SIZE = 8000;
 
-int temp[SIZE] = { 0 };
+//int temp[SIZE] = { 0 };
 
 random_device rd;
 mt19937 gen(rd());
@@ -23,6 +23,7 @@ void merge(int *arr, int left, int mid, int right);
 void mergeSort(int *arr, int left, int right);
 
 int main(int argc, char* argv[]) {
+
 	// 课本示例
 	/*int arr[] = {15,46,48,93,39,6,72,91,14,
 		36,69,40,89,61,97,12,21,54,
@@ -38,7 +39,7 @@ int main(int argc, char* argv[]) {
 
 	int* arr1 = NULL;
 	if (taskid == 0) {
-		int arr[SIZE];
+		int *arr = new int[SIZE];
 		arr1 = new int[SIZE];
 		getArray(arr, arr1);
 
@@ -49,9 +50,11 @@ int main(int argc, char* argv[]) {
 		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
 		cout << "Serial Correctness: " << check(arr) << endl;
 		cout << "Serial Running Time: " << static_cast <float> (duration) / 1000000.0f << " seconds" << endl;
+
+		delete[] arr;
 	}
 
-	int *task_arr = new int[SIZE / THREADS_NUM], task_sample[SAMPLE_SIZE];
+	int* task_arr = new int[SIZE / THREADS_NUM], task_sample[SAMPLE_SIZE];
 	int task_stride = SIZE / THREADS_NUM;
 	int sample_stride = SIZE / (SAMPLE_SIZE * THREADS_NUM);
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
@@ -70,7 +73,7 @@ int main(int argc, char* argv[]) {
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// 采样排序且选择主元
-	int* samples = NULL;
+	int *samples = NULL;
 	int *pivots = new int[THREADS_NUM - 1];
 
 	if (taskid == 0) {
@@ -149,6 +152,20 @@ int main(int argc, char* argv[]) {
 		cout << "Parallel Running Time: " << static_cast <float> (duration) / 1000000.0f << " seconds" << endl;
 	}
 
+
+	delete[] arr1;
+	delete[] task_arr;
+	delete[] samples;
+	delete[] pivots;
+	delete[] part_start_index;
+	delete[] part_len;
+	delete[] recv_part_len;
+	delete[] recv_start_index;
+	delete[] recv_task_arr;
+	delete[] sorted_arr;
+	delete[] lens;
+	delete[] len_index;
+
 	MPI_Finalize();
 	return 0;
 }
@@ -172,7 +189,7 @@ bool check(int arr[]) {
 	return true;
 }
 
-void merge(int *arr, int left, int mid, int right) {
+/*void merge(int* arr, int left, int mid, int right) {
 	int l = left, r = mid + 1, index = left;
 	while (l <= mid && r <= right) {
 		if (arr[l] <= arr[r]) {
@@ -192,14 +209,15 @@ void merge(int *arr, int left, int mid, int right) {
 		arr[i] = temp[i];
 	}
 	return;
-}
+}*/
 
 void mergeSort(int *arr, int left, int right) {
 	if (left < right) {
 		int mid = (right - left) / 2 + left;
 		mergeSort(arr, left, mid);
 		mergeSort(arr, mid + 1, right);
-		merge(arr, left, mid, right);
+		//merge(arr, left, mid, right);
+		std::inplace_merge(arr + left, arr + mid + 1, arr + right + 1);
 	}
 	return;
 }
