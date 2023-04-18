@@ -7,7 +7,7 @@
 using namespace std;
 
 const int SIZE = 1 << 24;
-const int THREADS_NUM = 16;
+const int NUM_THREADS = 16;
 const int SAMPLE_SIZE = 8000;
 
 random_device rd;
@@ -102,10 +102,10 @@ void mergeSort(vector<int>& arr, int left, int right) {
 }
 
 void regularSample(vector<int> arr, vector<int>& samples, vector<int>& pivots) {
-	int stride = SIZE / (SAMPLE_SIZE * THREADS_NUM);
+	int stride = SIZE / (SAMPLE_SIZE * NUM_THREADS);
 
 	// 正则采样
-	#pragma omp parallel num_threads(THREADS_NUM) shared(arr, samples) 
+	#pragma omp parallel num_threads(NUM_THREADS) shared(arr, samples) 
 	{
 		int tid = omp_get_thread_num();
 		// 记录不同处理器采样后放入的起始位置
@@ -121,10 +121,10 @@ void regularSample(vector<int> arr, vector<int>& samples, vector<int>& pivots) {
 	}
 
 	// 采样排序
-	mergeSort(samples, 0, SAMPLE_SIZE * THREADS_NUM - 1);
+	mergeSort(samples, 0, SAMPLE_SIZE * NUM_THREADS - 1);
 
 	// 选择主元
-	for (int i = 0; i < THREADS_NUM - 1; i++) {
+	for (int i = 0; i < NUM_THREADS - 1; i++) {
 		int pivot_index = (i + 1) * SAMPLE_SIZE;
 		pivots[i] = samples[pivot_index];
 	}
@@ -141,24 +141,24 @@ void regularSample(vector<int> arr, vector<int>& samples, vector<int>& pivots) {
 vector<int> pivotPartition(vector<int> arr, vector<int> pivots, vector<int>& accumulate_counts) {
 	// 主元划分
 	vector<int> arr_change(SIZE);
-	vector<vector<int> > lens(THREADS_NUM, vector<int>(THREADS_NUM));
-	vector<int> counts(THREADS_NUM);
+	vector<vector<int> > lens(NUM_THREADS, vector<int>(NUM_THREADS));
+	vector<int> counts(NUM_THREADS);
 
-	#pragma omp parallel num_threads(THREADS_NUM) shared(arr, temp, lens, counts, accumulate_counts)
+	#pragma omp parallel num_threads(NUM_THREADS) shared(arr, temp, lens, counts, accumulate_counts)
 	{
 		int tid = omp_get_thread_num();
-		int stride = SIZE / THREADS_NUM;
+		int stride = SIZE / NUM_THREADS;
 		int l = tid * stride, r = (tid + 1) * stride - 1;
-		vector<int> partitions(THREADS_NUM + 1);
+		vector<int> partitions(NUM_THREADS + 1);
 		partitions[0] = l - 1;
-		for (int i = 1; i < THREADS_NUM + 1; i++)
+		for (int i = 1; i < NUM_THREADS + 1; i++)
 			partitions[i] = r;
-		//partitions[THREADS_NUM] = r;
+		//partitions[NUM_THREADS] = r;
 
 
 		// 主元划分
 		int ll = l;
-		for (int i = 0; i < THREADS_NUM - 1; i++) {
+		for (int i = 0; i < NUM_THREADS - 1; i++) {
 			for (int j = ll; j <= r; j++) {
 				if (arr[j] > pivots[i]) {
 					partitions[i + 1] = j - 1;
@@ -169,13 +169,13 @@ vector<int> pivotPartition(vector<int> arr, vector<int> pivots, vector<int>& acc
 		}
 
 		// 这一段程序的目的是为了计算交换后的地址索引，注意这一块需要同步路障
-		lens[tid][THREADS_NUM - 1] = r - ll + 1;
-		for (int i = 0; i < THREADS_NUM; i++) {
+		lens[tid][NUM_THREADS - 1] = r - ll + 1;
+		for (int i = 0; i < NUM_THREADS; i++) {
 			lens[tid][i] = partitions[i + 1] - partitions[i];
 		}
 		#pragma omp barrier
 
-		for (int i = 0; i < THREADS_NUM; i++) {
+		for (int i = 0; i < NUM_THREADS; i++) {
 			counts[tid] += lens[i][tid];
 		}
 		#pragma omp barrier
@@ -187,7 +187,7 @@ vector<int> pivotPartition(vector<int> arr, vector<int> pivots, vector<int>& acc
 		// 这一段程序的目的是为了计算交换后的地址索引
 
 		// 全局交换
-		for (int i = 0; i < THREADS_NUM; i++) {
+		for (int i = 0; i < NUM_THREADS; i++) {
 			int dest_index = (i == 0) ? 0 : accumulate_counts[i - 1];
 			for (int ii = 0; ii < tid; ii++) {
 				dest_index += lens[ii][i];
@@ -201,16 +201,16 @@ vector<int> pivotPartition(vector<int> arr, vector<int> pivots, vector<int>& acc
 }
 
 void mergeSortParallel(vector<int>& arr) {
-	vector<int> samples(SAMPLE_SIZE * THREADS_NUM);
-	vector<int> pivots(THREADS_NUM - 1);
-	vector<int> accumulate_counts(THREADS_NUM);
-	omp_set_num_threads(THREADS_NUM);
+	vector<int> samples(SAMPLE_SIZE * NUM_THREADS);
+	vector<int> pivots(NUM_THREADS - 1);
+	vector<int> accumulate_counts(NUM_THREADS);
+	omp_set_num_threads(NUM_THREADS);
 
 	// 均匀划分且局部排序
-	#pragma omp parallel num_threads(THREADS_NUM) shared(arr)
+	#pragma omp parallel num_threads(NUM_THREADS) shared(arr)
 	{
 		int tid = omp_get_thread_num();
-		int stride = SIZE / THREADS_NUM;
+		int stride = SIZE / NUM_THREADS;
 		int l = tid * stride, r = (tid + 1) * stride - 1;
 		mergeSort(arr, l, r);
 	}
@@ -225,10 +225,10 @@ void mergeSortParallel(vector<int>& arr) {
 	#pragma omp barrier
 
 	// 归并排序
-	#pragma omp parallel num_threads(THREADS_NUM) shared(arr)
+	#pragma omp parallel num_threads(NUM_THREADS) shared(arr)
 	{
 		int tid = omp_get_thread_num();
-		int stride = SIZE / THREADS_NUM;
+		int stride = SIZE / NUM_THREADS;
 		int l = (tid == 0) ? 0 : accumulate_counts[tid - 1], r = accumulate_counts[tid] - 1;
 		mergeSort(arr, l, r);
 	}
