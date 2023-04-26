@@ -34,10 +34,10 @@ __global__ void vector_add3(float *out, float *a, float *b, int n)
     int tid = threadIdx.x;
     int stride = blockDim.x * gridDim.x;
 
-    temp[tid] = a[tid] + b[tid];
-    __syncthreads();
-
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i+= stride) {
+        temp[tid] = a[i] + b[i];
+        __syncthreads();
+        
         out[i] = temp[tid];
     }
 }
@@ -67,8 +67,8 @@ int main()
  
     // data initializtion
     for (int i = 0; i < LENGTH; i++) {
-        a[i] = 3.0f;
-        b[i] = 0.14f;
+        a[i] = i % (LENGTH - 2) - 5.0;
+        b[i] = i % (LENGTH + 2) + 5.0;
     }
     clock_t start0 = clock();
     for (int i = 0; i < LENGTH; i++) {
